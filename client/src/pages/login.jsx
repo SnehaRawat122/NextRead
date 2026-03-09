@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h2 style={styles.title}>📚 Welcome Back</h2>
+        <h2 style={styles.title}> Welcome Back</h2>
         {error && <p style={styles.error}>{error}</p>}
         <input style={styles.input} name="email" placeholder="Email"
           type="email" onChange={handleChange} />
