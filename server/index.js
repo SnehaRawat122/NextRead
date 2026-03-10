@@ -7,18 +7,14 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const bookRoutes = require('./routes/books');
 const ratingRoutes = require('./routes/ratings');
-const uploadRoutes = require('./routes/upload');   
+const uploadRoutes = require('./routes/upload');
 const onboardingRoutes = require('./routes/onboarding');
+const recommendRoutes = require('./routes/recommendations');  // 👈 add
 
 const app = express();
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
+app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 app.use(express.json());
-
-// Uploads folder publicly accessible
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));  
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected ✅'))
@@ -28,8 +24,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/upload', uploadRoutes);
-app.use('/api/onboarding', onboardingRoutes);      
-
+app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/recommendations', recommendRoutes);  // 👈 add
 
 app.get('/', (req, res) => res.send('Server running ✅'));
 

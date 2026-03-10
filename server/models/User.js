@@ -6,7 +6,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   preferences: {
     genres: [String],
-    authors: [String]
+    authors: [String],
+    favouriteBooks: [String],
+    moods: [String]
   },
   createdAt: { type: Date, default: Date.now }
 });
