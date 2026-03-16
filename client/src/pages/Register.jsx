@@ -16,17 +16,12 @@ export default function Register() {
     e.preventDefault();
     setLoading(true);
     setError('');
-
-    console.log('Submitting:', form);
-
     try {
       const res = await registerUser(form);
-      console.log('Response:', res.data);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       navigate('/onboarding');
     } catch (err) {
-      console.log('Full Error:', err);
       setError(err.response?.data?.message || 'Something went wrong');
     } finally {
       setLoading(false);
@@ -34,103 +29,116 @@ export default function Register() {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
+    <div style={{
+      minHeight: '100vh',
+      background: '#f0f4f8',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center'
+    }}>
+      <div style={{
+        background: '#ffffff',
+        padding: '2.5rem',
+        borderRadius: '16px',
+        width: '400px',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.10)'
+      }}>
+        <h2 style={{
+          textAlign: 'center',
+          color: '#4f46e5',
+          fontSize: '1.6rem',
+          marginBottom: '1.5rem'
+        }}>Create Account</h2>
 
-        <h2 style={styles.title}> Create Account</h2>
-
-        {error && <p style={styles.error}>{error}</p>}
+        {error && (
+          <div style={{
+            background: '#fff5f5',
+            border: '1px solid #feb2b2',
+            borderRadius: '8px',
+            padding: '10px',
+            marginBottom: '1rem',
+            textAlign: 'center'
+          }}>
+            <p style={{ color: '#e53e3e', fontSize: '14px' }}>{error}</p>
+            {error === 'Email already registered' && (
+              <p style={{ color: '#718096', fontSize: '13px', marginTop: '6px' }}>
+                Already have an account?{' '}
+                <Link to="/login" style={{ color: '#4f46e5', fontWeight: 'bold' }}>
+                  Login here →
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
-          <input
-            style={styles.input}
-            name="name"
-            placeholder="Full Name"
-            onChange={handleChange}
-            required
-          />
-          <input
-            style={styles.input}
-            name="email"
-            placeholder="Email"
-            type="email"
-            onChange={handleChange}
-            required
-          />
-          <input
-            style={styles.input}
-            name="password"
-            placeholder="Password"
-            type="password"
-            onChange={handleChange}
-            required
-          />
+          {['name', 'email', 'password'].map((field) => (
+            <input
+              key={field}
+              name={field}
+              type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'}
+              placeholder={field === 'name' ? 'Full Name' : field === 'email' ? 'Email' : 'Password'}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                margin: '8px 0',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                color: '#333',
+                fontSize: '14px',
+                boxSizing: 'border-box',
+                outline: 'none'
+              }}
+            />
+          ))}
           <button
             type="submit"
-            style={styles.button}
             disabled={loading}
-          >
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#4f46e5',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginTop: '1rem'
+            }}>
             {loading ? 'Creating Account...' : 'Register'}
           </button>
         </form>
 
-        <p style={styles.link}>
-          Already have an account? <Link to="/login">Login</Link>
-        </p>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          margin: '1.5rem 0'
+        }}>
+          <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+          <span style={{ padding: '0 10px', color: '#a0aec0', fontSize: '13px' }}>or</span>
+          <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+        </div>
 
+        <Link to="/login">
+          <button style={{
+            width: '100%',
+            padding: '12px',
+            background: 'white',
+            color: '#4f46e5',
+            border: '1px solid #4f46e5',
+            borderRadius: '8px',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}>
+            Already have an account? Login
+          </button>
+        </Link>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh',
-    background: '#f0f4f8'
-  },
-  card: {
-    background: 'white',
-    padding: '2rem',
-    borderRadius: '12px',
-    width: '350px',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-  },
-  title: {
-    textAlign: 'center',
-    marginBottom: '1.5rem',
-    color: '#333'
-  },
-  input: {
-    width: '100%',
-    padding: '10px',
-    margin: '8px 0',
-    borderRadius: '8px',
-    border: '1px solid #ddd',
-    fontSize: '14px',
-    boxSizing: 'border-box'
-  },
-  button: {
-    width: '100%',
-    padding: '12px',
-    background: '#4f46e5',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '16px',
-    cursor: 'pointer',
-    marginTop: '1rem'
-  },
-  error: {
-    color: 'red',
-    textAlign: 'center',
-    fontSize: '14px'
-  },
-  link: {
-    textAlign: 'center',
-    marginTop: '1rem',
-    fontSize: '14px'
-  }
-};
