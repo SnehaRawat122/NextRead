@@ -1,17 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/user');
+const User = require('../models/User');
 const protect = require('../middleware/authMiddleware');
 
 // ─── SAVE USER PREFERENCES ───────────────────────────────
 router.post('/preferences', protect, async (req, res) => {
   try {
-    const { genres, authors } = req.body;
+    const {
+      genres = [],
+      authors = [],
+      favouriteBooks = [],
+      moods = []
+    } = req.body;
     const userId = req.user.id;
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { preferences: { genres, authors } },
+      {
+        preferences: {
+          genres,
+          authors,
+          favouriteBooks,
+          moods
+        }
+      },
       { new: true }
     );
 

@@ -20,3 +20,4 @@ export const getBookById = (id) => API.get(`/books/${id}`);
 export const submitRating = (data) => API.post('/ratings/rate', data);
 export const getBookRatings = (bookId) => API.get(`/ratings/book/${bookId}`);
 export const getUserRatings = () => API.get('/ratings/user');
+export const getCollaborativeRecommendations = () => API.get('/recommendations/similar');

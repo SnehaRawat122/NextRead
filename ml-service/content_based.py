@@ -6,7 +6,7 @@ import pickle
 import os
 import requests
 
-# ─── LOAD AND CLEAN DATA ─────────────────────────────────
+#LOAD AND CLEAN DATA 
 def load_books():
     df = pd.read_csv('data/Books.csv', encoding='latin-1', low_memory=False)
     df = df[['ISBN', 'Book-Title', 'Book-Author', 'Year-Of-Publication',
@@ -19,7 +19,7 @@ def load_books():
     return df
 
 
-# ─── TRAIN TF-IDF MODEL ──────────────────────────────────
+# TRAIN TF-IDF MODEL 
 def train_model(df):
     tfidf = TfidfVectorizer(stop_words='english', max_features=5000)
     tfidf_matrix = tfidf.fit_transform(df['combined'])
@@ -29,12 +29,12 @@ def train_model(df):
     print(f"✅ Model trained on {len(df)} books!")
     return tfidf, tfidf_matrix, df
 
-# ─── LOAD SAVED MODEL ────────────────────────────────────
+# LOAD SAVED MODEL 
 def load_model():
     with open('models/tfidf_matrix.pkl', 'rb') as f:
         return pickle.load(f)
 
-# ─── GOOGLE BOOKS COVER FETCH ────────────────────────────
+# GOOGLE BOOKS COVER FETCH 
 def enrich_with_google(books):
     enriched = []
     for book in books:
@@ -54,7 +54,7 @@ def enrich_with_google(books):
         enriched.append(book)
     return enriched
 
-# ─── RECOMMEND BY BOOK TITLE ─────────────────────────────
+# RECOMMEND BY BOOK TITLE 
 def recommend_by_title(title, top_n=10):
     tfidf, tfidf_matrix, df = load_model()
 
@@ -69,7 +69,7 @@ def recommend_by_title(title, top_n=10):
     results = df.iloc[similar_indices][['title', 'author', 'cover', 'isbn']].to_dict('records')
     return enrich_with_google(results)  ##return image.
 
-# ─── RECOMMEND BY USER PREFERENCES ──────────────────────
+#RECOMMEND BY USER PREFERENCES
 def recommend_by_preferences(genres=[], authors=[], favourite_books=[], top_n=10):
     tfidf, tfidf_matrix, df = load_model()
 
@@ -87,7 +87,7 @@ def recommend_by_preferences(genres=[], authors=[], favourite_books=[], top_n=10
     results = df.iloc[top_indices][['title', 'author', 'cover', 'isbn']].to_dict('records')
     return enrich_with_google(results)  # enrich with Google Books covers
 
-# ─── TRAIN FROM SCRATCH ──────────────────────────────────
+# TRAIN FROM SCRATCH
 if __name__ == '__main__':
     print("Loading books dataset...")
     df = load_books()

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const User = require('../models/user');
+const User = require('../models/User');
+const Rating = require('../models/Rating');
 const protect = require('../middleware/authMiddleware');
 
 const ML_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
@@ -48,16 +49,23 @@ router.post('/by-title', async (req, res) => {
 
 
 // ─── COLLABORATIVE RECOMMENDATIONS ───────────────────────
-router.post('/similar', async (req, res) => {
+router.get('/similar', protect, async (req, res) => {
   try {
-    const { isbn } = req.body;
+    const ratings = await Rating.find({ userId: req.user.id }).populate('bookId', 'isbn');
+
+    const userRatings = ratings
+      .filter((entry) => entry.bookId?.isbn)
+      .map((entry) => ({
+        isbn: entry.bookId.isbn,
+        rating: entry.rating
+      }));
 
     const mlResponse = await axios.post(`${ML_URL}/recommend/collaborative`, {
-      isbn
+      user_ratings: userRatings
     });
 
     res.status(200).json({
-      message: 'Similar books fetched ✅',
+      message: 'Collaborative recommendations fetched ✅',
       recommendations: mlResponse.data.recommendations
     });
 

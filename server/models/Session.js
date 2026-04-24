@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+// for jwt token
 
 const sessionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

@@ -1,239 +1,181 @@
-import pandas as pd
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-from scipy.sparse import csr_matrix
-import pickle
 import os
+import pandas as pd
+from scipy.sparse import csr_matrix
+from sklearn.neighbors import NearestNeighbors
+from pymongo import MongoClient
+from dotenv import load_dotenv
 
-# ─── LOAD & CLEAN RATINGS ────────────────────────────────
-def load_ratings():
-    ratings = pd.read_csv('data/Ratings.csv', encoding='latin-1')
-    ratings.columns = ['user_id', 'isbn', 'rating']
+load_dotenv()
 
-    # Sirf explicit ratings rakho
-    ratings = ratings[ratings['rating'] > 0]
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "nextread")
+KAGGLE_CSV_PATH = os.getenv("KAGGLE_RATINGS_PATH", "./data/ratings.csv")
 
-    # Active users — kam se kam 10 books rate ki hain
-    user_counts = ratings['user_id'].value_counts()
-    active_users = user_counts[user_counts >= 10].index
-    ratings = ratings[ratings['user_id'].isin(active_users)]
+MIN_BOOK_RATINGS = 10
+MIN_USER_RATINGS = 5
+N_NEIGHBOURS = 20
 
-    # Popular books — kam se kam 20 baar rated
-    book_counts = ratings['isbn'].value_counts()
-    popular_books = book_counts[book_counts >= 20].index
-    ratings = ratings[ratings['isbn'].isin(popular_books)]
 
-    print(f"✅ Ratings loaded: {len(ratings)} interactions")
-    print(f"✅ Users: {ratings['user_id'].nunique()}")
-    print(f"✅ Books: {ratings['isbn'].nunique()}")
-
-    return ratings
-
-# ─── LOAD BOOKS DATA ─────────────────────────────────────
-def load_books_data():
-    df = pd.read_csv('data/Books.csv', encoding='latin-1', low_memory=False)
-    df = df[['ISBN', 'Book-Title', 'Book-Author', 'Image-URL-L']].copy()
-    df.columns = ['isbn', 'title', 'author', 'cover']
-    df.dropna(subset=['title'], inplace=True)
-    return df
-
-# ─── TRAIN USER-BASED KNN ────────────────────────────────
-def train_collaborative(ratings):
-    # User-item matrix — rows = USERS, cols = BOOKS
-    user_item_matrix = ratings.pivot_table(
-        index='user_id',
-        columns='isbn',
-        values='rating',
-        fill_value=0
-    )
-
-    # Sparse matrix
-    sparse_matrix = csr_matrix(user_item_matrix.values)
-
-    # KNN on USERS
-    model = NearestNeighbors(
-        metric='cosine',
-        algorithm='brute',
-        n_neighbors=20
-    )
-    model.fit(sparse_matrix)
-
-    os.makedirs('models', exist_ok=True)
-    with open('models/collaborative_model.pkl', 'wb') as f:
-        pickle.dump((model, user_item_matrix), f)
-
-    print(f"✅ User-based collaborative model trained!")
-    print(f"✅ Total users in model: {user_item_matrix.shape[0]}")
-    return model, user_item_matrix
-
-# ─── LOAD SAVED MODEL ────────────────────────────────────
-def load_collaborative_model():
-    with open('models/collaborative_model.pkl', 'rb') as f:
-        return pickle.load(f)
-
-# ─── POPULAR BOOKS FALLBACK ──────────────────────────────
-def get_popular_books(user_item_matrix, top_n=10):
+def load_kaggle_ratings():
     try:
-        books_df = load_books_data()
-        book_scores = user_item_matrix.sum(axis=0).sort_values(ascending=False)
-        top_isbns = book_scores.head(top_n * 2).index.tolist()
+        df = pd.read_csv(
+            KAGGLE_CSV_PATH,
+            sep=",",
+            encoding="latin-1",
+            on_bad_lines="skip",
+            usecols=["User-ID", "ISBN", "Book-Rating"],
+        )
+        df.columns = ["user_id", "isbn", "rating"]
+        df["user_id"] = "kaggle_" + df["user_id"].astype(str)
+        df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
+        df = df[df["rating"] > 0].dropna()
+        return df
+    except FileNotFoundError:
+        print(f"Kaggle CSV not found at {KAGGLE_CSV_PATH}, skipping.")
+        return pd.DataFrame(columns=["user_id", "isbn", "rating"])
 
-        results = []
-        for isbn in top_isbns:
-            book_info = books_df[books_df['isbn'] == isbn]
-            if not book_info.empty:
-                results.append({
-                    'isbn': isbn,
-                    'title': book_info.iloc[0]['title'],
-                    'author': book_info.iloc[0]['author'],
-                    'cover': book_info.iloc[0]['cover'],
-                    'score': float(book_scores[isbn])
-                })
-            if len(results) >= top_n:
-                break
 
-        return results
+def load_mongo_ratings():
+    try:
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        db = client[DB_NAME]
+        records = list(db.ratings.find({}, {"userId": 1, "isbn": 1, "rating": 1, "_id": 0}))
+        client.close()
+
+        if not records:
+            return pd.DataFrame(columns=["user_id", "isbn", "rating"])
+
+        df = pd.DataFrame(records)
+        df.rename(columns={"userId": "user_id"}, inplace=True)
+        df["user_id"] = df["user_id"].astype(str)
+        df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
+        return df.dropna()
     except Exception as e:
-        print(f"Popular books error: {e}")
-        return []
+        print(f"Could not connect to MongoDB: {e}")
+        return pd.DataFrame(columns=["user_id", "isbn", "rating"])
 
-# ─── RECOMMEND FROM USER'S OWN RATINGS ──────────────────
-def recommend_from_ratings(user_ratings, top_n=10):
-    try:
-        model, user_item_matrix = load_collaborative_model()
 
-        # User ki ratings ko vector mein convert karo
-        user_vector = np.zeros(len(user_item_matrix.columns))
+def build_combined_ratings():
+    kaggle_df = load_kaggle_ratings()
+    mongo_df = load_mongo_ratings()
 
-        matched = 0
-        for rating_obj in user_ratings:
-            isbn = rating_obj.get('isbn')
-            rating = rating_obj.get('rating', 0)
-            if isbn in user_item_matrix.columns:
-                col_idx = user_item_matrix.columns.get_loc(isbn)
-                user_vector[col_idx] = rating
-                matched += 1
+    combined = pd.concat([kaggle_df, mongo_df], ignore_index=True)
+    combined.drop_duplicates(subset=["user_id", "isbn"], keep="last", inplace=True)
+    return combined
 
-        print(f"✅ Matched {matched}/{len(user_ratings)} rated books in dataset")
 
-        # Agar koi match nahi — popular books return karo
-        if matched == 0:
-            print("No matches found — returning popular books")
-            return get_popular_books(user_item_matrix, top_n)
+class CollaborativeFilter:
 
-        # Similar users dhundo
-        distances, indices = model.kneighbors(
-            user_vector.reshape(1, -1),
-            n_neighbors=11
+    def __init__(self):
+        self.model = None
+        self.sparse_matrix = None
+        self.isbn_index = None
+        self.index_isbn = None
+
+    def fit(self):
+        df = build_combined_ratings()
+
+        valid_books = df.groupby("isbn")["user_id"].count()
+        valid_users = df.groupby("user_id")["isbn"].count()
+        df = df[
+            df["isbn"].isin(valid_books[valid_books >= MIN_BOOK_RATINGS].index) &
+            df["user_id"].isin(valid_users[valid_users >= MIN_USER_RATINGS].index)
+        ]
+
+        if df.empty:
+            print("Not enough data to build the rating matrix.")
+            return
+
+        pivot = df.pivot_table(index="isbn", columns="user_id", values="rating").fillna(0)
+
+        self.isbn_index = {isbn: i for i, isbn in enumerate(pivot.index)}
+        self.index_isbn = {i: isbn for isbn, i in self.isbn_index.items()}
+        self.sparse_matrix = csr_matrix(pivot.values.astype('float32'))
+
+        self.model = NearestNeighbors(
+            n_neighbors=N_NEIGHBOURS,
+            metric="cosine",
+            algorithm="brute",
+            n_jobs=-1,
+        )
+        self.model.fit(self.sparse_matrix)
+
+    def recommend(self, isbn, n=10):
+        if self.model is None:
+            raise RuntimeError("Model not fitted. Call fit() first.")
+
+        if isbn not in self.isbn_index:
+            return []
+
+        row_idx = self.isbn_index[isbn]
+        distances, indices = self.model.kneighbors(
+            self.sparse_matrix[row_idx], n_neighbors=n + 1
         )
 
-        # Already read ISBNs
-        already_read = set(r.get('isbn') for r in user_ratings)
-
-        # Similar users ki books collect karo — weighted score
-        weighted_scores = {}
-        for i, idx in enumerate(indices.flatten()[1:]):
-            similarity = 1 - distances.flatten()[i + 1]
-            if similarity <= 0:
+        results = []
+        for dist, idx in zip(distances.flatten(), indices.flatten()):
+            if idx == row_idx:
                 continue
-            user_row = user_item_matrix.iloc[idx]
+            results.append({
+                "isbn": self.index_isbn[idx],
+                "score": round(1 - float(dist), 4),
+            })
 
-            for isbn, rating in user_row.items():
-                if rating > 0 and isbn not in already_read:
-                    if isbn not in weighted_scores:
-                        weighted_scores[isbn] = 0
-                    weighted_scores[isbn] += similarity * rating
+        return results[:n]
 
-        # Top books sort karo
-        top_books = sorted(
-            weighted_scores.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:top_n]
+    def recommend_for_user(self, user_id, n=10):
+        if self.model is None:
+            raise RuntimeError("Model not fitted. Call fit() first.")
 
-        if not top_books:
-            print("No weighted scores — returning popular books")
-            return get_popular_books(user_item_matrix, top_n)
+        try:
+            client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+            db = client[DB_NAME]
+            user_ratings = list(db.ratings.find(
+                {"userId": user_id},
+                {"isbn": 1, "rating": 1, "_id": 0}
+            ))
+            client.close()
+        except Exception as e:
+            print(f"MongoDB error: {e}")
+            return []
 
-        # Books data fetch karo
-        books_df = load_books_data()
-        results = []
-        for isbn, score in top_books:
-            book_info = books_df[books_df['isbn'] == isbn]
-            if not book_info.empty:
-                results.append({
-                    'isbn': isbn,
-                    'title': book_info.iloc[0]['title'],
-                    'author': book_info.iloc[0]['author'],
-                    'cover': book_info.iloc[0]['cover'],
-                    'score': round(score, 3)
-                })
+        if not user_ratings:
+            return []
 
-        print(f"✅ Returning {len(results)} recommendations")
-        return results if results else get_popular_books(user_item_matrix, top_n)
+        rated_isbns = {r["isbn"] for r in user_ratings}
+        top_books = sorted(user_ratings, key=lambda x: x["rating"], reverse=True)[:5]
 
-    except Exception as e:
-        print(f"recommend_from_ratings error: {e}")
-        return []
+        aggregated = {}
+        for item in top_books:
+            for rec in self.recommend(item["isbn"], n=n):
+                if rec["isbn"] not in rated_isbns:
+                    if rec["isbn"] not in aggregated or rec["score"] > aggregated[rec["isbn"]]:
+                        aggregated[rec["isbn"]] = rec["score"]
 
-# ─── RECOMMEND BY KAGGLE USER ID ─────────────────────────
-def recommend_for_user(user_id, top_n=10):
-    try:
-        model, user_item_matrix = load_collaborative_model()
+        sorted_recs = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)
+        return [{"isbn": isbn, "score": score} for isbn, score in sorted_recs[:n]]
 
-        if user_id not in user_item_matrix.index:
-            print(f"User {user_id} not found — popular books")
-            return get_popular_books(user_item_matrix, top_n)
 
-        user_idx = user_item_matrix.index.get_loc(user_id)
+_cf_model = None
 
-        distances, indices = model.kneighbors(
-            user_item_matrix.iloc[user_idx, :].values.reshape(1, -1),
-            n_neighbors=11
-        )
+def get_cf_model():
+    global _cf_model
+    if _cf_model is None:
+        _cf_model = CollaborativeFilter()
+        _cf_model.fit()
+    return _cf_model
 
-        already_read = set(
-            user_item_matrix.columns[user_item_matrix.iloc[user_idx] > 0]
-        )
 
-        weighted_scores = {}
-        for i, idx in enumerate(indices.flatten()[1:]):
-            similarity = 1 - distances.flatten()[i + 1]
-            user_row = user_item_matrix.iloc[idx]
+def refresh_cf_model():
+    global _cf_model
+    _cf_model = CollaborativeFilter()
+    _cf_model.fit()
 
-            for isbn, rating in user_row.items():
-                if rating > 0 and isbn not in already_read:
-                    if isbn not in weighted_scores:
-                        weighted_scores[isbn] = 0
-                    weighted_scores[isbn] += similarity * rating
 
-        top_books = sorted(
-            weighted_scores.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:top_n]
+if __name__ == "__main__":
+    model = CollaborativeFilter()
+    model.fit()
 
-        books_df = load_books_data()
-        results = []
-        for isbn, score in top_books:
-            book_info = books_df[books_df['isbn'] == isbn]
-            if not book_info.empty:
-                results.append({
-                    'isbn': isbn,
-                    'title': book_info.iloc[0]['title'],
-                    'author': book_info.iloc[0]['author'],
-                    'cover': book_info.iloc[0]['cover'],
-                    'score': round(score, 3)
-                })
-
-        return results if results else get_popular_books(user_item_matrix, top_n)
-
-    except Exception as e:
-        print(f"recommend_for_user error: {e}")
-        return []
-
-# ─── TRAIN FROM SCRATCH ──────────────────────────────────
-if __name__ == '__main__':
-    print("Loading ratings...")
-    ratings = load_ratings()
-    train_collaborative(ratings)
+    recs = model.recommend("0316769177", n=5)
+    for r in recs:
+        print(f"ISBN: {r['isbn']}  |  Score: {r['score']}")

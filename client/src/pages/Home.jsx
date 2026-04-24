@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import BookRow from '../components/BookRow';
 import axios from 'axios';
+import { getCollaborativeRecommendations } from '../services/api';
 
 const ML_URL = 'http://localhost:8000';
 const API_URL = 'http://localhost:5000/api';
@@ -63,10 +64,8 @@ export default function Home() {
     setShowCollab(true);
     setLoadingCollab(true);
     try {
-      const mlRes = await axios.post(`${ML_URL}/recommend/collaborative`, {
-        isbn: '0316769177'
-      });
-      setCollaborativeBooks(mlRes.data.recommendations || []);
+      const response = await getCollaborativeRecommendations();
+      setCollaborativeBooks(response.data.recommendations || []);
     } catch (err) {
       console.log('Collab Error:', err);
     } finally {

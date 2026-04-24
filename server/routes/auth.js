@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs'); //encypt the pass b4 saving to db
 const jwt = require('jsonwebtoken'); //token made after login  
-const User = require('../models/user');
+const User = require('../models/User');
 
 // ─── REGISTER ───────────────────────────────────────────
 router.post('/register', async (req, res) => {

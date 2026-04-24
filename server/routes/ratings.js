@@ -52,3 +52,4 @@ router.get('/user', protect, async (req, res) => {
 });
 
 module.exports = router;
+
