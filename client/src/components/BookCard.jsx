@@ -1,20 +1,24 @@
+import { useNavigate } from 'react-router-dom';
 import StarRating from './StarRating';
 
 export default function BookCard({ book }) {
   const fallback = 'https://via.placeholder.com/120x180?text=No+Cover';
+  const navigate = useNavigate();
 
   return (
-    <div style={{
-      background: '#ffffff',
-      borderRadius: '12px',
-      overflow: 'hidden',
-      width: '155px',
-      flexShrink: 0,
-      border: '1px solid #e2e8f0',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-      cursor: 'pointer',
-      transition: 'transform 0.2s, box-shadow 0.2s'
-    }}
+    <div
+      style={{
+        background: '#ffffff',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        width: '155px',
+        flexShrink: 0,
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+        cursor: 'pointer',
+        transition: 'transform 0.2s, box-shadow 0.2s'
+      }}
+      onClick={() => navigate(`/book/${book._id || book.isbn}`)}
       onMouseEnter={e => {
         e.currentTarget.style.transform = 'translateY(-4px)';
         e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.13)';
@@ -22,7 +26,8 @@ export default function BookCard({ book }) {
       onMouseLeave={e => {
         e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.07)';
-      }}>
+      }}
+    >
 
       {/* COVER IMAGE */}
       <img

@@ -100,7 +100,7 @@ class CollaborativeFilter:
         )
         self.model.fit(self.sparse_matrix)
 
-    def recommend(self, isbn, n=10):
+    def recommend(self, isbn, n=2):
         if self.model is None:
             raise RuntimeError("Model not fitted. Call fit() first.")
 
