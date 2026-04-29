@@ -40,7 +40,12 @@ router.post('/preferences', protect, async (req, res) => {
 router.get('/preferences', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('preferences');
-    res.status(200).json(user.preferences);
+    res.status(200).json(user?.preferences || {
+      genres: [],
+      authors: [],
+      favouriteBooks: [],
+      moods: []
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -50,7 +55,7 @@ router.get('/preferences', protect, async (req, res) => {
 router.get('/status', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('preferences');
-    const isDone = user.preferences.genres.length > 0;
+    const isDone = (user?.preferences?.genres || []).length > 0;
     res.status(200).json({ onboardingDone: isDone });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

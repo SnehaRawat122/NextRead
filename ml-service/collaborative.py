@@ -39,7 +39,27 @@ def load_mongo_ratings():
     try:
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         db = client[DB_NAME]
-        records = list(db.ratings.find({}, {"userId": 1, "isbn": 1, "rating": 1, "_id": 0}))
+        pipeline = [
+            {
+                "$lookup": {
+                    "from": "books",
+                    "localField": "bookId",
+                    "foreignField": "_id",
+                    "as": "book",
+                }
+            },
+            {"$unwind": "$book"},
+            {
+                "$project": {
+                    "_id": 0,
+                    "userId": 1,
+                    "rating": 1,
+                    "isbn": "$book.isbn",
+                }
+            },
+            {"$match": {"isbn": {"$nin": [None, ""]}}},
+        ]
+        records = list(db.ratings.aggregate(pipeline))
         client.close()
 
         if not records:
@@ -130,10 +150,27 @@ class CollaborativeFilter:
         try:
             client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
             db = client[DB_NAME]
-            user_ratings = list(db.ratings.find(
-                {"userId": user_id},
-                {"isbn": 1, "rating": 1, "_id": 0}
-            ))
+            pipeline = [
+                {"$match": {"userId": user_id}},
+                {
+                    "$lookup": {
+                        "from": "books",
+                        "localField": "bookId",
+                        "foreignField": "_id",
+                        "as": "book",
+                    }
+                },
+                {"$unwind": "$book"},
+                {
+                    "$project": {
+                        "_id": 0,
+                        "rating": 1,
+                        "isbn": "$book.isbn",
+                    }
+                },
+                {"$match": {"isbn": {"$nin": [None, ""]}}},
+            ]
+            user_ratings = list(db.ratings.aggregate(pipeline))
             client.close()
         except Exception as e:
             print(f"MongoDB error: {e}")

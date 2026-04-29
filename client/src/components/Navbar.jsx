@@ -1,3 +1,4 @@
+
 import { useNavigate } from 'react-router-dom';
 
 export default function Navbar() {
@@ -26,15 +27,17 @@ export default function Navbar() {
       <div
         onClick={() => navigate('/home')}
         style={{
-          fontSize: '1.4rem',
+          fontSize: '1.7rem',
           fontWeight: 'bold',
-          color: '#4f46e5',
-          cursor: 'pointer'
+          cursor: 'pointer',
+     fontFamily: "'Pacifico', cursive",
+      color: "#333",
+  
         }}>
        NextRead
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <span style={{ color: '#4f46e5', fontSize: '14px', fontWeight: '500' }}>
+        <span style={{ color: "#333", fontSize: '1.4rem', fontWeight: '500',fontFamily: "'Pacifico', cursive" }}>
           👤 {user?.name}
         </span>
         <button
@@ -46,7 +49,7 @@ export default function Navbar() {
             border: '1px solid #4f46e5',
             borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '1.4rem',
             fontWeight: '500'
           }}>
           Logout

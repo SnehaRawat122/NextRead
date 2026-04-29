@@ -172,11 +172,13 @@ const styles = {
  page: {
     minHeight: '100vh',
     background: '#f0f4f8'
+      
   },
   container: {
     maxWidth: '1200px',
     margin: '0 auto',
     padding: '2rem'
+      
   },
   hero: {
     textAlign: 'center',

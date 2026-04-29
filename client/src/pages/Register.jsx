@@ -31,10 +31,16 @@ export default function Register() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#f0f4f8',
       display: 'flex',
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+       backgroundImage:
+        "url('https://i.pinimg.com/1200x/41/da/49/41da493dcd1ab5bc2e18fb2e682860a0.jpg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center"
     }}>
       <div style={{
         background: '#ffffff',

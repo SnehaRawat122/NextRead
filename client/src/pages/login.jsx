@@ -54,7 +54,13 @@ export default function Login() {
 
 const styles = {
   container: { display: 'flex', justifyContent: 'center',
-    alignItems: 'center', height: '100vh', background: '#f0f4f8' },
+    alignItems: 'center', height: '100vh', backgroundImage:
+        "url('https://i.pinimg.com/1200x/41/da/49/41da493dcd1ab5bc2e18fb2e682860a0.jpg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center" },
   card: { background: 'white', padding: '2rem', borderRadius: '12px',
     width: '350px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' },
   title: { textAlign: 'center', marginBottom: '1.5rem', color: '#333' },

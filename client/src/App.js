@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Home from './pages/Home';
 import BookDetail from './pages/BookDetail';
+import BookshelfScanner from './pages/BookshelfScanner';
+import Landing from "./pages/Landing";
 
 // Wrapper so BookDetail gets router hooks
 function BookDetailPage() {
@@ -22,13 +24,15 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Landing />} />
         <Route path="/" element={<Navigate to="/register" />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/home" element={<Home />} />
         <Route path="/book/:id" element={<BookDetailPage />} />
-      </Routes>
+        <Route path="/bookshelf-scanner" element={<BookshelfScanner />} />
+    </Routes>
     </BrowserRouter>
   );
 }

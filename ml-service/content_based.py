@@ -4,7 +4,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import pickle
 import os
-import requests
 
 # LOAD AND CLEAN DATA
 def load_books():
@@ -43,23 +42,14 @@ def load_model():
         return pickle.load(f)
 
 
-# GOOGLE BOOKS COVER FETCH
 def enrich_with_google(books):
+    # Keep recommendation responses local and fast.
+    # The dataset already includes cover URLs, so we normalize them instead of
+    # blocking each request on external Google Books API calls.
     enriched = []
     for book in books:
-        try:
-            query = f"{book['title']} {book['author']}"
-            url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=1"
-            res = requests.get(url, timeout=3).json()
-            items = res.get('items', [])
-            if items:
-                img = items[0].get('volumeInfo', {}).get('imageLinks', {})
-                cover = img.get('thumbnail', book.get('cover', ''))
-                book['cover'] = cover.replace('http://', 'https://')
-            else:
-                book['cover'] = book.get('cover', '')
-        except:
-            book['cover'] = book.get('cover', '')
+        cover = (book.get('cover') or '').replace('http://', 'https://')
+        book['cover'] = cover
         enriched.append(book)
     return enriched
 
