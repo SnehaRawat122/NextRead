@@ -8,10 +8,31 @@ const protect = require('../middleware/authMiddleware');
 router.post('/add', protect, async (req, res) => {
   try {
     const { title, author, genre, description, coverImage, isbn, publishedYear } = req.body;
+
+    // ── Duplicate check — ISBN ya title+author already exists ──
+    if (isbn) {
+      const existing = await Book.findOne({ isbn });
+      if (existing) {
+        return res.status(200).json({ message: 'Book already exists', book: existing });
+      }
+    } else {
+      const existing = await Book.findOne({
+        title: { $regex: new RegExp(`^${title}$`, 'i') },
+        author: { $regex: new RegExp(`^${author}$`, 'i') }
+      });
+      if (existing) {
+        return res.status(200).json({ message: 'Book already exists', book: existing });
+      }
+    }
+
+    // ── publishedYear string hai toh number mein convert karo ──
+    const year = publishedYear ? parseInt(publishedYear) : undefined;
+
     const book = await Book.create({
       title, author, genre, description,
-      coverImage, isbn, publishedYear
+      coverImage, isbn, publishedYear: year
     });
+
     res.status(201).json({ message: 'Book added ✅', book });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

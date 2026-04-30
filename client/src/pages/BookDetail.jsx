@@ -161,26 +161,63 @@ export default function BookDetail() {
     return () => document.head.removeChild(tag);
   }, []);
 
-  // ── Fetch book from MongoDB ──
-  useEffect(() => {
-    const fetchBook = async () => {
-      setLoading(true);
-      setError(false);
+ useEffect(() => {
+  const fetchBook = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(`${API_URL}/books/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBook(res.data);
+    } catch (err) {
+      // MongoDB mein nahi mila → Google Books se try karo
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get(`${API_URL}/books/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setBook(res.data);
-      } catch (err) {
-        console.error("Book fetch failed:", err);
+        // Try 1: ISBN se
+        let item = null;
+        const isbnRes = await axios.get(
+          `https://www.googleapis.com/books/v1/volumes?q=isbn:${id}&maxResults=1`
+        );
+        item = isbnRes.data.items?.[0];
+
+        // Try 2: Agar ISBN se nahi mila → title search (Google volume ID case)
+        if (!item) {
+          const volRes = await axios.get(
+            `https://www.googleapis.com/books/v1/volumes/${id}`
+          );
+          if (volRes.data?.volumeInfo) {
+            item = volRes.data;
+          }
+        }
+
+        if (item) {
+          const info = item.volumeInfo;
+          setBook({
+            isbn: id,
+            title: info.title || 'Unknown Title',
+            author: info.authors?.join(', ') || 'Unknown Author',
+            coverImage: info.imageLinks?.thumbnail?.replace('http://', 'https://')
+                     || info.imageLinks?.smallThumbnail?.replace('http://', 'https://')
+                     || '',
+            avgRating: info.averageRating || 0,
+            description: info.description || '',
+            publisher: info.publisher || '',
+            publishedYear: info.publishedDate || '',
+            genre: info.categories || [],
+          });
+        } else {
+          setError(true);
+        }
+      } catch {
         setError(true);
-      } finally {
-        setLoading(false);
       }
-    };
-    if (id) fetchBook();
-  }, [id]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  if (id) fetchBook();
+}, [id]);
 
   // ── Fetch Google Books info once book is loaded ──
   useEffect(() => {
@@ -196,25 +233,55 @@ export default function BookDetail() {
 
   // ── Submit Rating ──
   const handleRatingSubmit = async () => {
-    if (!userRating) return;
-    setRatingError('');
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `${API_URL}/ratings/rate`,
-        { bookId: book._id, rating: userRating },
+  if (!userRating) return;
+  setRatingError('');
+  try {
+    const token = localStorage.getItem("token");
+
+    // Pehle book ko MongoDB mein save karo agar nahi hai
+    let bookId = book._id;
+
+    if (!bookId) {
+      // Google Books se aayi book hai → pehle MongoDB mein save karo
+      const saveRes = await axios.post(
+        `${API_URL}/books/add`,
+        {
+          title:         book.title,
+          author:        book.author,
+          isbn:          book.isbn,
+          coverImage:    book.coverImage || book.cover || '',
+          description:   book.description || '',
+          publisher:     book.publisher || '',
+          publishedYear: book.publishedYear 
+  ? parseInt(book.publishedYear.toString().substring(0, 4)) 
+  : undefined,
+          genre:         book.genre || [],
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setRatingSubmitted(true);
-      setBook(prev => ({ ...prev, avgRating: userRating }));
-    } catch (err) {
-      if (err.response?.status === 400) {
-        setAlreadyRated(true);
-      } else {
-        setRatingError('Something went wrong. Please try again.');
-      }
+      bookId = saveRes.data.book._id;
+      // Local state update karo
+      setBook(prev => ({ ...prev, _id: bookId }));
     }
-  };
+
+    await axios.post(
+      `${API_URL}/ratings/rate`,
+      { bookId, rating: userRating },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    setRatingSubmitted(true);
+    setBook(prev => ({ ...prev, avgRating: userRating }));
+  } catch (err) {
+    if (err.response?.status === 400) {
+      setAlreadyRated(true);
+    } else {
+      setRatingError('Something went wrong. Please try again.');
+      console.error('Rating error:', err.response?.data);
+    }
+  }
+};
+   
 
   const getBuyLinks = (b, gb) => [
     { label: "Buy on Amazon",       icon: "📦", href: `https://www.amazon.in/s?k=${encodeURIComponent(b.title + " " + b.author)}`, className: "bd-buy-amazon"   },
@@ -237,8 +304,8 @@ export default function BookDetail() {
   if (error || !book) {
     return (
       <div style={{ textAlign: "center", padding: "4rem", fontFamily: "'DM Sans',sans-serif", color: "#64748b" }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>😕</div>
-        <p>Book not found.</p>
+        <div style={{ fontSize: 48, marginBottom: 12 }}></div>
+        <p>Book Info not found!!</p>
         <button onClick={() => navigate(-1)} style={{ marginTop: 16, padding: "10px 24px", background: "#4f46e5", color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
           ← Go Back
         </button>
@@ -247,8 +314,7 @@ export default function BookDetail() {
   }
 
   const displayRating = hoverRating || userRating;
-  const fallback = `https://via.placeholder.com/200x290/4338ca/ffffff?text=${encodeURIComponent(book.title || "Book")}`;
-
+  const fallback = `https://placehold.co/200x290/4338ca/ffffff?text=${encodeURIComponent((book?.title || 'Book').substring(0,10))}`;
   // Description priority: Google Books > MongoDB > nothing
   const description = gbInfo?.description || book.description || null;
 
@@ -270,7 +336,7 @@ export default function BookDetail() {
         <div className="bd-hero-inner">
           <div className="bd-cover-wrap">
             <div className="bd-cover-spine" />
-            <img className="bd-cover" src={book.coverImage || fallback} alt={book.title}
+            <img className="bd-cover" src={book.coverImage || book.cover || fallback} alt={book.title}
               onError={(e) => { e.target.src = fallback; }} />
           </div>
           <div className="bd-hero-info">

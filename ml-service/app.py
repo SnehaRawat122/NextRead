@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from content_based import recommend_by_title, recommend_by_preferences, load_books, train_model
 from collaborative import get_cf_model, refresh_cf_model
-from image_detection import image_bp
+from image_detection import image_detection_bp
 import os
 
 
@@ -24,7 +24,7 @@ load_env_file()
 
 app = Flask(__name__)
 CORS(app)
-app.register_blueprint(image_bp)
+app.register_blueprint(image_detection_bp)
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
