@@ -6,22 +6,57 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+// ─── CACHE HELPERS ───────────────────────────────────────────
+const CACHE_KEYS = {
+  forYou:      'nr_cache_forYou',
+  collab:      'nr_cache_collab',
+  search:      'nr_cache_search',
+  searchQuery: 'nr_cache_searchQuery',
+  stats:       'nr_cache_stats',
+  showCollab:  'nr_cache_showCollab',
+  activeGenre: 'nr_cache_activeGenre',
+};
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes — baad mein fresh fetch hoga
+
+function saveCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+  } catch {}
+}
+
+function loadCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
-  const [forYouBooks,        setForYouBooks]        = useState([]);
-  const [collaborativeBooks, setCollaborativeBooks] = useState([]);
-  const [searchResults,      setSearchResults]      = useState([]);
-  const [searchQuery,        setSearchQuery]        = useState('');
-  const [loadingForYou,      setLoadingForYou]      = useState(true);
-  const [loadingCollab,      setLoadingCollab]      = useState(false);
-  const [loadingSearch,      setLoadingSearch]      = useState(false);
-  const [showCollab,         setShowCollab]         = useState(false);
-  const [stats,              setStats]              = useState({ rated: 0 });
-  const [activeGenre,        setActiveGenre]        = useState(null);
+  // ── State — cache se initialize karo ─────────────────────
+  const [forYouBooks,        setForYouBooks]        = useState(() => loadCache(CACHE_KEYS.forYou)      || []);
+  const [collaborativeBooks, setCollaborativeBooks] = useState(() => loadCache(CACHE_KEYS.collab)      || []);
+  const [searchResults,      setSearchResults]      = useState(() => loadCache(CACHE_KEYS.search)      || []);
+  const [searchQuery,        setSearchQuery]        = useState(() => loadCache(CACHE_KEYS.searchQuery) || '');
+  const [stats,              setStats]              = useState(() => loadCache(CACHE_KEYS.stats)       || { rated: 0 });
+  const [showCollab,         setShowCollab]         = useState(() => loadCache(CACHE_KEYS.showCollab)  || false);
+  const [activeGenre,        setActiveGenre]        = useState(() => loadCache(CACHE_KEYS.activeGenre) || null);
+
+  const [loadingForYou,  setLoadingForYou]  = useState(false);
+  const [loadingCollab,  setLoadingCollab]  = useState(false);
+  const [loadingSearch,  setLoadingSearch]  = useState(false);
 
   const user     = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
 
-  // ─── GREETING ────────────────────────────────────────
+  // ─── GREETING ────────────────────────────────────────────
   const getGreeting = () => {
     const h = new Date().getHours();
     if (h < 12) return 'Good morning';
@@ -29,31 +64,42 @@ export default function Home() {
     return 'Good evening';
   };
 
-  // ─── FETCH STATS ─────────────────────────────────────
+  // ─── FETCH STATS ─────────────────────────────────────────
+  // Sirf fetch karo agar cache nahi hai
   useEffect(() => {
+    const cached = loadCache(CACHE_KEYS.stats);
+    if (cached) return; // cache hai → skip
+
     const fetchStats = async () => {
       try {
         const token = localStorage.getItem('token');
         const res = await axios.get(`${API_URL}/auth/stats`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setStats({ rated: res.data.ratingCount || 0 });
-      } catch {
-        // silently fail — stats decorative hain
-      }
+        const newStats = { rated: res.data.ratingCount || 0 };
+        setStats(newStats);
+        saveCache(CACHE_KEYS.stats, newStats);
+      } catch {}
     };
     fetchStats();
   }, []);
 
-  // ─── FOR YOU ─────────────────────────────────────────
+  // ─── FOR YOU ─────────────────────────────────────────────
+  // Sirf fetch karo agar cache nahi hai
   useEffect(() => {
+    const cached = loadCache(CACHE_KEYS.forYou);
+    if (cached && cached.length > 0) return; // cache hai → skip
+
     const fetchForYou = async () => {
+      setLoadingForYou(true);
       try {
         const token = localStorage.getItem('token');
         const res = await axios.get(`${API_URL}/recommendations/for-you`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setForYouBooks(res.data.recommendations || []);
+        const books = res.data.recommendations || [];
+        setForYouBooks(books);
+        saveCache(CACHE_KEYS.forYou, books);
       } catch (err) {
         console.log('Error fetching recommendations:', err.message);
       } finally {
@@ -63,8 +109,7 @@ export default function Home() {
     fetchForYou();
   }, []);
 
-  // ─── GOOGLE BOOKS — backend proxy se call ────────────
-  // Direct googleapis.com frontend se nahi — 429 avoid karne ke liye
+  // ─── GOOGLE BOOKS PROXY ──────────────────────────────────
   const searchGoogleBooks = async (query) => {
     try {
       const res = await axios.get(
@@ -77,21 +122,20 @@ export default function Home() {
     }
   };
 
-  // ─── SEARCH ──────────────────────────────────────────
+  // ─── SEARCH ──────────────────────────────────────────────
   const handleSearch = async (query = searchQuery) => {
     if (!query.trim()) return;
     setLoadingSearch(true);
     setSearchResults([]);
+    saveCache(CACHE_KEYS.searchQuery, query);
 
     const queryLower = query.toLowerCase().trim();
     const queryWords = queryLower.split(' ').filter(w => w.length > 2);
 
     try {
-      // Step 1 — ML service se results lo
       const res = await axios.post(`${API_URL}/recommendations/by-title`, { title: query });
       let results = res.data.recommendations || [];
 
-      // Step 2 — ML ne relevant result diya ya nahi check karo
       const hasExactMatch = results.length > 0 && results.some(b => {
         const titleLower = b.title?.toLowerCase() || '';
         const matchCount = queryWords.filter(w => titleLower.includes(w)).length;
@@ -99,11 +143,8 @@ export default function Home() {
       });
 
       if (!hasExactMatch) {
-        // ML irrelevant tha — Google Books se lo
         results = await searchGoogleBooks(query);
-
       } else if (results.length < 5) {
-        // ML ne kam results diye — Google se top up karo
         const gbBooks = await searchGoogleBooks(query);
         const existingTitles = new Set(results.map(b => b.title?.toLowerCase()));
         results = [
@@ -113,33 +154,38 @@ export default function Home() {
       }
 
       setSearchResults(results);
+      saveCache(CACHE_KEYS.search, results);       // ← cache save
+      saveCache(CACHE_KEYS.searchQuery, query);
 
     } catch {
-      // ML service down — Google Books fallback
-      console.log('ML failed, trying Google Books...');
       const gbBooks = await searchGoogleBooks(query);
       if (gbBooks.length > 0) {
         setSearchResults(gbBooks);
-      } else {
-        console.log('Both search methods failed');
+        saveCache(CACHE_KEYS.search, gbBooks);     // ← cache save
       }
     } finally {
       setLoadingSearch(false);
     }
   };
 
-  // ─── SUGGEST ME ──────────────────────────────────────
+  // ─── SUGGEST ME ──────────────────────────────────────────
   const handleSuggestMe = async () => {
     setShowCollab(true);
+    saveCache(CACHE_KEYS.showCollab, true);
+
+    // Cache hai toh dobara fetch mat karo
+    const cached = loadCache(CACHE_KEYS.collab);
+    if (cached && cached.length > 0) return;
+
     setLoadingCollab(true);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${API_URL}/recommendations/hybrid`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      console.log('Hybrid weights:', res.data.weights);
-      console.log('Rating count:', res.data.ratingCount);
-      setCollaborativeBooks(res.data.recommendations || []);
+      const books = res.data.recommendations || [];
+      setCollaborativeBooks(books);
+      saveCache(CACHE_KEYS.collab, books);         // ← cache save
     } catch (err) {
       console.log('Hybrid Error:', err.message);
     } finally {
@@ -147,16 +193,35 @@ export default function Home() {
     }
   };
 
-  // ─── GENRE QUICK FILTER ──────────────────────────────
+  // ─── GENRE CLICK ─────────────────────────────────────────
   const handleGenreClick = (genre) => {
-    setActiveGenre(genre === activeGenre ? null : genre);
-    handleSearch(genre);
+    const newGenre = genre === activeGenre ? null : genre;
+    setActiveGenre(newGenre);
+    saveCache(CACHE_KEYS.activeGenre, newGenre);
+    if (newGenre) {
+      setSearchQuery(newGenre);
+      handleSearch(newGenre);
+    }
   };
 
-  // ─── SCAN ────────────────────────────────────────────
+  // ─── CLEAR CACHE (logout ya refresh chahiye toh) ─────────
+  // Yeh function call karo jab user manually refresh chahta ho
+  const handleRefresh = () => {
+    Object.values(CACHE_KEYS).forEach(k => localStorage.removeItem(k));
+    setForYouBooks([]);
+    setCollaborativeBooks([]);
+    setSearchResults([]);
+    setSearchQuery('');
+    setStats({ rated: 0 });
+    setShowCollab(false);
+    setActiveGenre(null);
+    window.location.reload();
+  };
+
+  // ─── SCAN ────────────────────────────────────────────────
   const handleScanShelf = () => navigate('/bookshelf-scanner');
 
-  // ─── USER GENRES ─────────────────────────────────────
+  // ─── USER GENRES ─────────────────────────────────────────
   const userGenres = user?.preferences?.genres?.length
     ? user.preferences.genres
     : ['Fantasy', 'Mystery', 'Sci-Fi', 'Classic Lit'];
@@ -193,6 +258,10 @@ export default function Home() {
             </button>
             <button style={s.scanBtn} onClick={handleScanShelf}>
               <span style={s.btnIcon}>◎</span> Scan a cover
+            </button>
+            {/* Refresh button — cache clear karta hai */}
+            <button style={s.refreshBtn} onClick={handleRefresh} title="Refresh recommendations">
+              ↻
             </button>
           </div>
         </div>
@@ -280,6 +349,7 @@ const s = {
   btnIcon:    { fontSize: '13px' },
   suggestBtn: { background: 'none', border: '1px solid #c4c0ef', borderRadius: '30px', padding: '8px 20px', fontSize: '13px', color: '#534AB7', cursor: 'pointer', fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' },
   scanBtn:    { background: 'none', border: '1px solid #c4c0ef', borderRadius: '30px', padding: '8px 20px', fontSize: '13px', color: '#534AB7', cursor: 'pointer', fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' },
+  refreshBtn: { background: 'none', border: '1px solid #c4c0ef', borderRadius: '50%', width: '36px', height: '36px', fontSize: '16px', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   statsBar: { display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid #e8e6f5', borderRadius: '16px', padding: '0', marginBottom: '20px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(83,74,183,0.06)' },
   statItem: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '14px' },
