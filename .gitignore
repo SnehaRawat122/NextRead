@@ -1,4 +1,5 @@
-ml-service/__pycache__/
-ml-service/venv/
-*.pyc
+node_modules/
 .env
+ml-service/models/
+ml-service/data/
+ml-service/__pycache__/
