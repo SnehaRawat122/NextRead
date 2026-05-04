@@ -272,6 +272,7 @@ export default function BookDetail() {
 
     setRatingSubmitted(true);
     setBook(prev => ({ ...prev, avgRating: userRating }));
+    
   } catch (err) {
     if (err.response?.status === 400) {
       setAlreadyRated(true);
