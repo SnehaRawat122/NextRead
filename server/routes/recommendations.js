@@ -56,7 +56,25 @@ router.post('/by-title', async (req, res) => {
     return res.status(500).json({ message: 'ML service error' });
   }
 });
-
+// ─── ISBN NORMALIZE HELPER ───────────────────────────────────
+async function getRealISBN(bookId) {
+  // Already numeric ISBN hai
+  if (/^\d{10,13}$/.test(bookId)) return bookId;
+  
+  // Google Books ID hai — real ISBN fetch karo
+  try {
+    const res = await axios.get(
+      `https://www.googleapis.com/books/v1/volumes/${bookId}`,
+      { timeout: 3000 }
+    );
+    const identifiers = res.data.volumeInfo?.industryIdentifiers || [];
+    const isbn13 = identifiers.find(i => i.type === 'ISBN_13');
+    const isbn10 = identifiers.find(i => i.type === 'ISBN_10');
+    return isbn13?.identifier || isbn10?.identifier || bookId;
+  } catch {
+    return bookId;
+  }
+}
 // ─── HYBRID ("Users Like You Also Liked") ────────────────────
 // GET /api/recommendations/hybrid
 //
@@ -85,8 +103,11 @@ router.get('/hybrid', authMiddleware, async (req, res) => {
       const ratedIsbns = new Set();
       for (const r of topRatings) {
         const book = await Book.findById(r.bookId).select('isbn').lean();
-        if (book?.isbn) ratedIsbns.add(book.isbn);
-      }
+        if (book?.isbn) {
+          const realIsbn = await getRealISBN(book.isbn);
+          ratedIsbns.add(realIsbn);
+        }
+    }
 
       console.log(`User rated ISBNs: ${[...ratedIsbns]}`);
 
