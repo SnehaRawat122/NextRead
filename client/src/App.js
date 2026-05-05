@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
-import Register from './pages/Register';
-import Login from './pages/Login';
-import Onboarding from './pages/Onboarding';
-import Home from './pages/Home';
-import BookDetail from './pages/BookDetail';
-import BookshelfScanner from './pages/BookshelfScanner';
-import Landing from "./pages/Landing";
+import Register from './pages/Register.jsx';
+import Login from './pages/Login.jsx';
+import Onboarding from './pages/Onboarding.jsx';
+import Home from './pages/Home.jsx';
+import BookDetail from './pages/BookDetail.jsx';
+import BookshelfScanner from './pages/BookshelfScanner.jsx';
+import Landing from "./pages/Landing.jsx";
 
 // Wrapper so BookDetail gets router hooks
 function BookDetailPage() {
