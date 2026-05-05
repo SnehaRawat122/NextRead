@@ -16,6 +16,7 @@ function getInitials(title) {
   if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
 }
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 export default function BookshelfScanner() {
   const [preview, setPreview]                 = useState(null);
