@@ -89,9 +89,13 @@ export default function BookshelfScanner() {
     formData.append('bookshelf', imageFile);
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.post('/api/image-search/detect', formData, {
-        headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
-      });
+      // const { data } = await axios.post('/api/image-search/detect', formData, {
+      //   headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+      // });
+
+const { data } = await axios.post(`${API_URL}/image-search/detect`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+    });
       setDetected(data.detected || []);
       if (!data.detected?.length) setError('No books detected. Try a clearer photo.');
     } catch {
