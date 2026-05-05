@@ -9,5 +9,4 @@ Pillow
 requests
 pymongo
 python-dotenv
-gunicorn
-numpy
+scipy
