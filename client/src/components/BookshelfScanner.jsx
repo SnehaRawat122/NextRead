@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 export default function BookshelfScanner() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -33,12 +35,16 @@ export default function BookshelfScanner() {
     setRecommendations([]);
 
     const formData = new FormData();
-    formData.append('image', image); // ✅ field name matches backend multer
+    formData.append('image', image);
 
     try {
-      const { data } = await axios.post('/api/image-search/scan', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 35000, // ML service can be slow
+      const token = localStorage.getItem('token');
+      const { data } = await axios.post(`${API_URL}/image-search/scan`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`,
+        },
+        timeout: 35000,
       });
 
       if (!data.recommendations?.length) {
