@@ -2,32 +2,23 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from content_based import recommend_by_title, recommend_by_preferences, load_books, train_model
 from collaborative import get_cf_model, refresh_cf_model
-from image_detection import image_detection_bp
 import os
-
-
-def load_env_file():
-    env_path = os.path.join(os.path.dirname(__file__), '.env')
-    if not os.path.exists(env_path):
-        return
-
-    with open(env_path, 'r', encoding='utf-8') as env_file:
-        for raw_line in env_file:
-            line = raw_line.strip()
-            if not line or line.startswith('#') or '=' not in line:
-                continue
-            key, value = line.split('=', 1)
-            os.environ.setdefault(key.strip(), value.strip())
-
-
-load_env_file()
+import threading
 
 app = Flask(__name__)
 CORS(app)
-app.register_blueprint(image_detection_bp)
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def load_models_background():
+    try:
+        print("Loading collaborative model in background...")
+        get_cf_model()
+        print("✅ Collaborative model ready!")
+    except Exception as e:
+        print(f"Warning: {e}")
 
 
 @app.route('/', methods=['GET'])
@@ -68,32 +59,24 @@ def collaborative():
     return jsonify({'recommendations': results})
 
 
-# ─── HYBRID ENDPOINT ──────────────────────────────────────
 @app.route('/recommend/hybrid', methods=['POST'])
 def hybrid():
     data = request.json
-
     user_id         = data.get('userId', '')
     rating_count    = data.get('ratingCount', 0)
     genres          = data.get('genres', [])
     authors         = data.get('authors', [])
     favourite_books = data.get('favouriteBooks', [])
 
-    # Dynamic weights based on rating count
     if rating_count <= 5:
-        w_content = 0.80
-        w_collab  = 0.20
+        w_content, w_collab = 0.80, 0.20
     elif rating_count <= 20:
-        w_content = 0.50
-        w_collab  = 0.50
+        w_content, w_collab = 0.50, 0.50
     else:
-        w_content = 0.20
-        w_collab  = 0.70
+        w_content, w_collab = 0.20, 0.70
 
-    # Content-based results
     content_results = recommend_by_preferences(genres, authors, favourite_books, top_n=20)
 
-    # Collaborative results (only if user has enough ratings)
     collab_results = []
     if rating_count >= 3 and user_id:
         try:
@@ -102,16 +85,13 @@ def hybrid():
         except Exception as e:
             print(f"Collab error (non-fatal): {e}")
 
-    # Merge scores
     scores = {}
-
     for i, book in enumerate(content_results):
         isbn = book.get('isbn', f'content_{i}')
         scores[isbn] = {
             'book': book,
             'score': w_content * (1 - i / max(len(content_results), 1))
         }
-
     for item in collab_results:
         isbn = item.get('isbn')
         if not isbn:
@@ -130,6 +110,38 @@ def hybrid():
         'weights': {'content': w_content, 'collaborative': w_collab},
         'ratingCount': rating_count
     })
+
+
+@app.route('/recommend/image', methods=['POST'])
+def by_image():
+    # Lazy import — torch sirf tab load hoga jab actually call aaye
+    try:
+        from image_recommender import recommend_by_image
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image uploaded'}), 400
+        file = request.files['image']
+        img_path = f"/tmp/{file.filename}"
+        file.save(img_path)
+        results = recommend_by_image(img_path)
+        return jsonify({'recommendations': results})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/scan', methods=['POST'])
+def scan():
+    # Lazy import — Gemini/torch sirf tab load hoga
+    try:
+        from image_detection import detect_books
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image uploaded'}), 400
+        file = request.files['image']
+        img_path = f"/tmp/{file.filename}"
+        file.save(img_path)
+        results = detect_books(img_path)
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/train', methods=['GET'])
@@ -151,10 +163,8 @@ if __name__ == '__main__':
         df = load_books()
         train_model(df)
 
-    print("Loading collaborative model...")
-    get_cf_model()
+    t = threading.Thread(target=load_models_background, daemon=True)
+    t.start()
 
     port = int(os.environ.get('PORT', 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-    
